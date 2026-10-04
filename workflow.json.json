@@ -1,0 +1,253 @@
+{
+  "name": "Project 1 Daily Brief Pokemon and Game deals",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "45 8 * * 1-5"
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.4,
+      "position": [
+        -400,
+        -64
+      ],
+      "id": "bd730671-8131-40c6-b166-e654b5ea3f76",
+      "name": "Schedule Trigger"
+    },
+    {
+      "parameters": {
+        "url": "https://www.cheapshark.com/api/1.0/deals?pageSize=3&sortBy=Savings",
+        "options": {
+          "timeout": 10000
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "position": [
+        -176,
+        32
+      ],
+      "id": "9d28025e-8ef6-41e7-ad2f-75cca61a6338",
+      "name": "Get 3 Deals",
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "const brief = $input.first().json.brief;\nconst pokeStatus = brief.includes(\"(Pokémon temporarily unavailable)\") ? \"failed\" : \"ok\";\nconst dealStatus = brief.includes(\"(Game deals temporarily unavailable)\") ? \"failed\" : \"ok\";\nlet runStatus = \"ok\";\nif (pokeStatus === \"failed\" && dealStatus === \"failed\") {\n  runStatus = \"failed\";\n} else if (pokeStatus === \"failed\" || dealStatus === \"failed\") {\n  runStatus = \"degraded\";\n}\nreturn [ { json: {\n  timestamp: new Date().toLocaleString(\"en-IN\", { timeZone: \"Asia/Kolkata\" }),\n  run_status: runStatus,\n  pokemon_status: pokeStatus,\n  deals_status: dealStatus,\n  brief_length: brief.length\n} } ];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        736,
+        -160
+      ],
+      "id": "1f668c3a-f7cd-41d9-b356-21d7f3186816",
+      "name": "RUN STATUS"
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.2,
+      "position": [
+        272,
+        -64
+      ],
+      "id": "ee6312b0-6675-4f6d-9a81-788861105e7e",
+      "name": "MERGE BOTH THE RESPONSE"
+    },
+    {
+      "parameters": {
+        "jsCode": "const deals = $input.all().map(i => i.json).filter(d => d && d.title);\n\n// Guard: request failed, so no deal has a title\nif (deals.length === 0) {\n  return [ { json: { dealText: \"🎮 Game Deals\\n(Game deals temporarily unavailable)\\n\\n\" } } ];\n}\n\nlet text = \"🎮 Top Game Deals (USD)\\n\";\ndeals.forEach(d => {\n  const sale = parseFloat(d.salePrice);\n  const normal = parseFloat(d.normalPrice);\n  const savings = Math.round(parseFloat(d.savings));\n  const price = sale === 0 ? \"FREE\" : \"$\" + sale.toFixed(2);\n  text += \"• \" + d.title + \": \" + price + \" (was $\" + normal.toFixed(2) + \", -\" + savings + \"%)\\n\";\n  text += \"  \" + d.steamRatingText + \", deal score \" + d.dealRating + \"/10\\n\";\n});\n\nreturn [ { json: { dealText: text + \"\\n\" } } ];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        48,
+        32
+      ],
+      "id": "39298437-e488-4452-b35b-f5f241bafa38",
+      "name": "Format Deals"
+    },
+    {
+      "parameters": {
+        "jsCode": "const items = $input.all();\nlet pokeText = \"\";\nlet dealText = \"\";\nitems.forEach(item => {\n  if (item.json.pokeText) pokeText += item.json.pokeText;\n  if (item.json.dealText) dealText += item.json.dealText;\n});\nconst today = new Date().toLocaleDateString(\"en-IN\", {\n  timeZone: \"Asia/Kolkata\", weekday: \"long\", day: \"numeric\", month: \"long\", year: \"numeric\"\n});\nreturn [ { json: { subject: \"Daily Brief: \" + today, brief: \"📅 \" + today + \"\\n\\n\" + pokeText + dealText } } ];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        496,
+        -64
+      ],
+      "id": "5c8dae7d-883d-475e-a53a-b1e08d2f6097",
+      "name": "Build Brief"
+    },
+    {
+      "parameters": {
+        "sendTo": "EMAIL ID",
+        "subject": "={{ $json.subject }}",
+        "message": "={{ $json.brief }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.2,
+      "position": [
+        736,
+        16
+      ],
+      "id": "587fce30-da68-4115-ac4c-7b4030b526d2",
+      "name": "Send Brief Email",
+      "webhookId": "5a5412a4-a2f9-4673-a8b3-9957841ea72e",
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "qjMcoaHLsvidJJKn",
+          "name": "Gmail account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "url": "=https://pokeapi.co/api/v2/pokemon/{{ Math.floor(Date.now()/86400000) % 1000 + 1 }}\n",
+        "options": {
+          "timeout": 10000
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "position": [
+        -176,
+        -160
+      ],
+      "id": "3b43c303-454a-42da-8458-31a63e287cc7",
+      "name": "Get daily Pokemon",
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "const p = $input.first().json;\n\n// Guard: request failed or response has no name\nif (!p || !p.name) {\n  return [ { json: { pokeText: \"🎲 Pokémon of the Day\\n(Pokémon temporarily unavailable)\\n\\n\" } } ];\n}\n\nconst types = p.types.map(t => t.type.name).join(\", \");\nconst height = p.height / 10;\nconst weight = p.weight / 10;\nconst hp = p.stats.find(s => s.stat.name === \"hp\").base_stat;\n\nconst text = \"🎲 Pokémon of the Day\\n\" +\n  \"#\" + p.id + \" \" + p.name + \" (\" + types + \")\\n\" +\n  \"Height: \" + height + \" m, Weight: \" + weight + \" kg, HP: \" + hp + \"\\n\\n\";\n\nreturn [ { json: { pokeText: text } } ];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        48,
+        -160
+      ],
+      "id": "fba0cd4d-7cad-437c-8817-1df80c83bb98",
+      "name": "Format Pokemon"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Schedule Trigger": {
+      "main": [
+        [
+          {
+            "node": "Get daily Pokemon",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Get 3 Deals",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get 3 Deals": {
+      "main": [
+        [
+          {
+            "node": "Format Deals",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "RUN STATUS": {
+      "main": [
+        []
+      ]
+    },
+    "MERGE BOTH THE RESPONSE": {
+      "main": [
+        [
+          {
+            "node": "Build Brief",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format Deals": {
+      "main": [
+        [
+          {
+            "node": "MERGE BOTH THE RESPONSE",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Build Brief": {
+      "main": [
+        [
+          {
+            "node": "RUN STATUS",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Send Brief Email",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get daily Pokemon": {
+      "main": [
+        [
+          {
+            "node": "Format Pokemon",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format Pokemon": {
+      "main": [
+        [
+          {
+            "node": "MERGE BOTH THE RESPONSE",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  },
+  "versionId": "b1bba54b-85e3-44dc-a88d-1aaaf6c6fb00",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "REMOVED"
+  },
+  "nodeGroups": [],
+  "id": "6X5zJmZcI49AxvoZ",
+  "tags": []
+}
